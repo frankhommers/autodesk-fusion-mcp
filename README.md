@@ -23,6 +23,22 @@ dependencies required.
 
 ## Installation
 
+### Option A: Install from release zip (recommended)
+
+1. Download `AutodeskFusionMCP-v*.zip` from the
+   [Releases](https://github.com/frankhommers/autodesk-fusion-mcp/releases)
+   page.
+2. Extract the zip into your Fusion add-ins folder:
+   - **macOS:** `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/`
+   - **Windows:** `%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\`
+3. Make sure the extracted folder is named `AutodeskFusionMCP` (rename it if
+   the zip extracts to a different name).
+4. Open Fusion, press **Shift+S**, select the **Add-Ins** tab, and run
+   **AutodeskFusionMCP**.
+5. The server listens on `http://127.0.0.1:8765/mcp`.
+
+### Option B: Clone from source
+
 1. Clone this repository into your Fusion add-ins folder:
    - **macOS:** `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/`
    - **Windows:** `%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\`
