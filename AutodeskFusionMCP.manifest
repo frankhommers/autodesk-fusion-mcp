@@ -1,0 +1,12 @@
+{
+	"autodeskProduct": "Fusion",
+	"type": "addin",
+	"author": "Frank Hommers / Initialize",
+	"description": {
+		"": "Standalone MCP server for AI control of Autodesk Fusion - no external dependencies"
+	},
+	"version": "1.0.0",
+	"runOnStartup": true,
+	"supportedOS": "windows|mac",
+	"editEnabled": true
+}

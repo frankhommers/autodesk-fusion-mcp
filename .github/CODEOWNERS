@@ -1,0 +1,9 @@
+# Protected Autodesk template snapshot and freeze guardrails.
+# Adjust the owner handle if repository ownership changes.
+
+/lib/fusionAddInUtils/** @frankhommers
+/third_party/autodesk_fusion_template/** @frankhommers
+/config.py @frankhommers
+/tests/test_autodesk_vendor_freeze.py @frankhommers
+/.github/CODEOWNERS @frankhommers
+/.github/workflows/tests.yml @frankhommers
