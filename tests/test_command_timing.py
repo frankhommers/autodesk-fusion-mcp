@@ -2,7 +2,9 @@
 
 import re
 import threading
+import time
 import unittest
+from datetime import datetime
 
 import _fusion_test_bootstrap  # noqa: F401  (installs adsk mock + parent pkg shim)
 
@@ -49,13 +51,29 @@ class LogTimestampTests(unittest.TestCase):
         self.assertTrue(self._captured[0].endswith(" hello"))
 
     def test_deferred_message_is_timestamped_at_log_time(self):
-        # A background thread defers the message; nothing is logged yet.
+        # Log from a background thread so the message is deferred, then wait
+        # before flushing. If the stamp were computed in drain_logs() (flush
+        # time) instead of at log time, it would land ~after `flush_marker`;
+        # proving a comfortable gap rules that out.
         worker = threading.Thread(target=lambda: dispatch.log("deferred"))
         worker.start()
         worker.join()
-        self.assertEqual(self._captured, [])
-        # Flushing replays the already-stamped message.
+        self.assertEqual(self._captured, [])  # deferred: nothing logged yet
+
+        time.sleep(0.05)
+        flush_marker = datetime.now()
         dispatch.drain_logs()
+
         self.assertEqual(len(self._captured), 1)
-        self.assertRegex(self._captured[0], ISO_PREFIX_RE)
-        self.assertTrue(self._captured[0].endswith(" deferred"))
+        captured = self._captured[0]
+        self.assertRegex(captured, ISO_PREFIX_RE)
+        self.assertTrue(captured.endswith(" deferred"))
+
+        stamped_at = datetime.fromisoformat(captured.split(" ", 1)[0])
+        gap_seconds = (flush_marker - stamped_at).total_seconds()
+        self.assertGreaterEqual(
+            gap_seconds,
+            0.02,
+            "deferred message must be stamped at log time, not flush time "
+            f"(gap was {gap_seconds:.3f}s)",
+        )
