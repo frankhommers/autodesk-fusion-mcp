@@ -50,12 +50,17 @@ def format_duration(elapsed_ms):
 
 
 def log(message: str, level=None):
-    """Log immediately on the main thread, or defer for later flushing."""
+    """Log immediately on the main thread, or defer for later flushing.
+
+    The message is timestamped at call time so deferred (background-thread)
+    lines reflect when they were logged, not when they were flushed.
+    """
+    stamped = f"{datetime.now().isoformat(timespec='milliseconds')} {message}"
     if threading.current_thread() is threading.main_thread():
-        futil.log(message) if level is None else futil.log(message, level)
+        futil.log(stamped) if level is None else futil.log(stamped, level)
         return
     with _msg_lock:
-        _deferred_messages.append((message, level))
+        _deferred_messages.append((stamped, level))
 
 
 def drain_logs():
