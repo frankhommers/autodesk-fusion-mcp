@@ -3,6 +3,7 @@
 import queue
 import threading
 import traceback
+from datetime import datetime
 
 import adsk.core
 
@@ -35,6 +36,17 @@ def get_app():
 
 
 # ── Thread-safe logging ──────────────────────────────────────────────────
+
+
+def format_duration(elapsed_ms):
+    """Human-readable elapsed time.
+
+    Under one second -> integer milliseconds (e.g. ``122ms``);
+    one second or longer -> seconds with two decimals (e.g. ``4.52s``).
+    """
+    if elapsed_ms < 1000:
+        return f"{elapsed_ms:.0f}ms"
+    return f"{elapsed_ms / 1000:.2f}s"
 
 
 def log(message: str, level=None):
