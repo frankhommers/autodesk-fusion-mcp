@@ -1,5 +1,6 @@
 """Fusion bridge server assembly and startup/shutdown wiring."""
 
+import time
 import traceback
 
 import adsk.core
@@ -10,6 +11,7 @@ from . import doc_lookup, python_exec, tool_surface
 from .dispatch import (
     dispatch_to_main_thread,
     drain_logs,
+    format_duration,
     get_shutdown_flag,
     init_main_thread_dispatch,
     log,
@@ -21,19 +23,34 @@ from .dispatch import (
 _server = None
 
 
-def create_server():
+def handle_any_tool(call_data):
+    """Route to the correct handler based on tool name, timing execution."""
     from . import operations
 
-    def handle_any_tool(call_data):
-        """Route to the correct handler based on tool name in call_data."""
-        tool_name = call_data.get("params", {}).get("name", "")
-        handler = operations.TOOL_HANDLERS.get(tool_name)
-        if handler is None:
-            return {
-                "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
-                "isError": True,
-            }
-        return handler(call_data)
+    tool_name = call_data.get("params", {}).get("name", "")
+    handler = operations.TOOL_HANDLERS.get(tool_name)
+    if handler is None:
+        return {
+            "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
+            "isError": True,
+        }
+
+    start = time.perf_counter()
+    result = None
+    try:
+        result = handler(call_data)
+        return result
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        is_error = result is None or (
+            isinstance(result, dict) and result.get("isError")
+        )
+        status = "failed" if is_error else "completed"
+        log(f"[MCP] {tool_name} {status} in {format_duration(elapsed_ms)}")
+
+
+def create_server():
+    from . import operations
 
     set_tool_handler(handle_any_tool)
 

@@ -77,3 +77,61 @@ class LogTimestampTests(unittest.TestCase):
             "deferred message must be stamped at log time, not flush time "
             f"(gap was {gap_seconds:.3f}s)",
         )
+
+
+from fusion_bridge import operations, runtime
+
+
+class HandleAnyToolTimingTests(unittest.TestCase):
+    TOOL = "__timing_test_tool__"
+
+    def setUp(self):
+        self._logs = []
+        self._orig_log = runtime.log
+        runtime.log = lambda message, *a, **kw: self._logs.append(message)
+        self._had_tool = self.TOOL in operations.TOOL_HANDLERS
+        self._saved = operations.TOOL_HANDLERS.get(self.TOOL)
+
+    def tearDown(self):
+        runtime.log = self._orig_log
+        if self._had_tool:
+            operations.TOOL_HANDLERS[self.TOOL] = self._saved
+        else:
+            operations.TOOL_HANDLERS.pop(self.TOOL, None)
+
+    def _call(self):
+        return runtime.handle_any_tool(
+            {"params": {"name": self.TOOL, "arguments": {}}}
+        )
+
+    def test_successful_call_logs_completed_with_duration(self):
+        operations.TOOL_HANDLERS[self.TOOL] = lambda cd: {"content": [], "isError": False}
+        result = self._call()
+        self.assertFalse(result["isError"])
+        self.assertEqual(len(self._logs), 1)
+        self.assertRegex(
+            self._logs[0],
+            r"^\[MCP\] " + re.escape(self.TOOL) + r" completed in \d",
+        )
+
+    def test_error_result_logs_failed(self):
+        operations.TOOL_HANDLERS[self.TOOL] = lambda cd: {"content": [], "isError": True}
+        self._call()
+        self.assertIn("failed in", self._logs[0])
+
+    def test_exception_propagates_and_logs_failed(self):
+        def boom(cd):
+            raise ValueError("boom")
+
+        operations.TOOL_HANDLERS[self.TOOL] = boom
+        with self.assertRaises(ValueError):
+            self._call()
+        self.assertEqual(len(self._logs), 1)
+        self.assertIn("failed in", self._logs[0])
+
+    def test_unknown_tool_returns_error_without_timing_line(self):
+        result = runtime.handle_any_tool(
+            {"params": {"name": "no_such_tool", "arguments": {}}}
+        )
+        self.assertTrue(result["isError"])
+        self.assertEqual(self._logs, [])
