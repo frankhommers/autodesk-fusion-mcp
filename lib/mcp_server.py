@@ -52,7 +52,7 @@ MCP_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0]
 DEFAULT_PROTOCOL_VERSION = "2025-03-26"
 
 # Server info
-SERVER_INFO = {"name": "autodesk-fusion-mcp", "version": "1.1.0"}
+SERVER_INFO = {"name": "autodesk-fusion-mcp", "version": "1.2.0"}
 
 # Server capabilities
 SERVER_CAPABILITIES = {"tools": {}, "resources": {}}

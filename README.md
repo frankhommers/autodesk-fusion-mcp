@@ -166,6 +166,16 @@ This project is licensed under the terms of the MIT license. See [LICENSE](LICEN
 
 ## Changelog
 
+- v 1.2.0
+  - `fetch_online_documentation` now understands all three Autodesk help
+    layouts. Property pages contribute `property_type`, `access` and
+    `property_description`; class pages contribute their `methods`,
+    `properties` and `accessed_from` member lists
+  - Property syntax lines are recognised (they carry no argument list, and
+    Autodesk leaves the emphasis tag unclosed)
+  - Fixed every sample on a page inheriting the first sample's URL
+  - Fixed descriptions coming back empty, as Autodesk emits `<p class="api">`
+
 - v 1.1.0
   - Negotiate the MCP protocol version instead of always answering
     `2025-03-26`; `2025-11-25` and `2025-06-18` are now supported, which fixes
