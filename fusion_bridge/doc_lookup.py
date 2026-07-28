@@ -318,7 +318,9 @@ class DocumentationProvider:
             body = raw_section[heading_end + 5 :]
 
             if heading == "description":
-                m = re.search(r"<p>(.*?)</p>", body, re.DOTALL)
+                # Autodesk emits <p class="api">, so the tag cannot be matched
+                # bare -- doing so silently returned an empty description.
+                m = re.search(r"<p[^>]*>(.*?)</p>", body, re.DOTALL)
                 if m:
                     result["description"] = _strip_tags(m.group(1))
 

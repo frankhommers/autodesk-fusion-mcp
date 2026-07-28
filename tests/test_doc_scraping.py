@@ -13,12 +13,18 @@ import _fusion_test_bootstrap  # noqa: F401  (installs adsk mock + parent pkg sh
 from fusion_bridge.doc_lookup import DocumentationProvider
 
 
-def _page(body):
-    """Wrap *body* in a minimal cloudhelp-shaped document."""
+def _page(body, paragraph='<p class="api">Creates a new sketch.</p>'):
+    """Wrap *body* in a minimal cloudhelp-shaped document.
+
+    The default paragraph mirrors the live markup, which carries a class
+    attribute -- matching a bare ``<p>`` silently yielded no description.
+    """
     return (
         '<html><body><h2 class="api">Description</h2>'
-        "<p>Creates a new sketch.</p>"
-        "<pre>" + body + "</pre></body></html>"
+        + paragraph
+        + "<pre>"
+        + body
+        + "</pre></body></html>"
     )
 
 
@@ -64,9 +70,28 @@ class SectionExtractionTests(unittest.TestCase):
     def setUp(self):
         self.provider = DocumentationProvider()
 
-    def test_description_section_is_parsed(self):
+    def test_description_with_class_attribute_is_parsed(self):
+        # Live markup is <p class="api">; a bare <p> match returned nothing.
         result = self.provider._extract_all_sections(
             _page(""), "https://example.invalid", "Sketches", "add"
+        )
+        self.assertEqual(result["description"], "Creates a new sketch.")
+
+    def test_description_without_attributes_is_parsed(self):
+        result = self.provider._extract_all_sections(
+            _page("", paragraph="<p>Creates a new sketch.</p>"),
+            "https://example.invalid",
+            "Sketches",
+            "add",
+        )
+        self.assertEqual(result["description"], "Creates a new sketch.")
+
+    def test_description_tags_are_stripped(self):
+        result = self.provider._extract_all_sections(
+            _page("", paragraph='<p class="api">Creates a <b>new</b> sketch.</p>'),
+            "https://example.invalid",
+            "Sketches",
+            "add",
         )
         self.assertEqual(result["description"], "Creates a new sketch.")
 
