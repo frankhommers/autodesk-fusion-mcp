@@ -344,11 +344,13 @@ class DocumentationProvider:
                     result["samples"] = samples
 
         # Syntax (outside h2 structure)
+        # Autodesk switched the emphasis tag from <strong> to <b> in 2025;
+        # accept either so the syntax line keeps resolving on both layouts.
         syntax_m = re.search(
-            r"returnValue\s*=\s*\w+\.<strong>(\w+)</strong>\((.*?)\)", html
+            r"returnValue\s*=\s*\w+\.<(strong|b)>(\w+)</\1>\((.*?)\)", html
         )
         if syntax_m:
-            result["syntax"] = f"{syntax_m.group(1)}({syntax_m.group(2)})"
+            result["syntax"] = f"{syntax_m.group(2)}({syntax_m.group(3)})"
 
         return result
 
