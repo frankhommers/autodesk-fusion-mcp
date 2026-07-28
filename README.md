@@ -166,6 +166,16 @@ This project is licensed under the terms of the MIT license. See [LICENSE](LICEN
 
 ## Changelog
 
+- v 1.3.0
+  - `fetch_online_documentation` returns a `preview` flag, so an agent can see
+    that a class is preview API before building on it. Autodesk renames these
+    between releases without a deprecation period
+  - Design guide: fixed every example, which wrapped its arguments in an
+    `operation` field that no tool accepts
+  - Design guide: new sections on preview APIs and on sheet metal ordering,
+    covering `foldFeatures`, `joinByBendFeatures`, `cornerClosureFeatures` and
+    flat patterns
+
 - v 1.2.0
   - `fetch_online_documentation` now understands all three Autodesk help
     layouts. Property pages contribute `property_type`, `access` and
