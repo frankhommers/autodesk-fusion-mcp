@@ -110,5 +110,147 @@ class SectionExtractionTests(unittest.TestCase):
         self.assertIsNone(result["member_name"])
 
 
+def _sectioned(*sections):
+    """Build a page from ``(heading, inner_html)`` pairs."""
+    parts = ["<html><body>"]
+    for heading, inner in sections:
+        parts.append(f'<h2 class="api">{heading}</h2>{inner}')
+    parts.append("</body></html>")
+    return "".join(parts)
+
+
+_MEMBER_TABLE = (
+    "<table>"
+    "<tr><th>Name</th><th>Description</th></tr>"
+    "<tr><td>addByCurve</td><td>Adds a curve.</td></tr>"
+    "<tr><td>deleteMe</td><td>Deletes the entity.</td></tr>"
+    "</table>"
+)
+
+
+class PropertyPageTests(unittest.TestCase):
+    """Property pages carry prose under 'Property Value', not a table."""
+
+    def setUp(self):
+        self.provider = DocumentationProvider()
+
+    def _parse(self, html):
+        return self.provider._extract_all_sections(
+            html, "https://example.invalid", "Sketch", "profiles"
+        )
+
+    def test_read_only_property_is_described(self):
+        result = self._parse(
+            _sectioned(
+                (
+                    "Property Value",
+                    "This is a read only property whose value is a "
+                    '<a href="Profiles.htm">Profiles</a>.',
+                )
+            )
+        )
+        self.assertEqual(result["property_type"], "Profiles")
+        self.assertEqual(result["access"], "read only")
+        self.assertIn("read only", result["property_description"])
+
+    def test_read_write_property_access_is_detected(self):
+        result = self._parse(
+            _sectioned(
+                (
+                    "Property Value",
+                    "This is a read/write property whose value is a "
+                    '<a href="DesignTypes.htm">DesignTypes</a>.',
+                )
+            )
+        )
+        self.assertEqual(result["property_type"], "DesignTypes")
+        self.assertEqual(result["access"], "read/write")
+
+    def test_property_syntax_survives_unclosed_bold_tag(self):
+        # Autodesk emits "propertyValue = sketch_var.<b>profiles<br />" --
+        # note the <b> is never closed.
+        html = _sectioned(
+            ("Syntax", "<pre>propertyValue = sketch_var.<b>profiles<br /></pre>")
+        )
+        self.assertEqual(self._parse(html)["syntax"], "profiles")
+
+    def test_method_syntax_wins_over_property_syntax(self):
+        html = _sectioned(
+            (
+                "Syntax",
+                "<pre>returnValue = sketches_var.<b>add</b>(planarEntity)<br />"
+                "propertyValue = sketches_var.<b>count</pre>",
+            )
+        )
+        self.assertEqual(self._parse(html)["syntax"], "add(planarEntity)")
+
+
+class ClassPageTests(unittest.TestCase):
+    """Class pages list members in tables that were previously discarded."""
+
+    def setUp(self):
+        self.provider = DocumentationProvider()
+
+    def _parse(self, html):
+        return self.provider._extract_all_sections(
+            html, "https://example.invalid", "Sketch", None
+        )
+
+    def test_methods_table_is_captured(self):
+        result = self._parse(_sectioned(("Methods", _MEMBER_TABLE)))
+        self.assertEqual(
+            [m["name"] for m in result["methods"]], ["addByCurve", "deleteMe"]
+        )
+        self.assertEqual(result["methods"][0]["description"], "Adds a curve.")
+
+    def test_properties_table_is_captured(self):
+        result = self._parse(_sectioned(("Properties", _MEMBER_TABLE)))
+        self.assertEqual(len(result["properties"]), 2)
+
+    def test_accessed_from_links_are_listed(self):
+        result = self._parse(
+            _sectioned(
+                (
+                    "Accessed From",
+                    '<a href="A.htm">A.one</a>, <a href="B.htm">B.two</a>',
+                )
+            )
+        )
+        self.assertEqual(result["accessed_from"], ["A.one", "B.two"])
+        self.assertNotIn("accessed_from_truncated", result)
+
+    def test_long_accessed_from_list_is_capped(self):
+        links = ", ".join(f'<a href="C{i}.htm">C{i}.member</a>' for i in range(40))
+        result = self._parse(_sectioned(("Accessed From", links)))
+        self.assertEqual(len(result["accessed_from"]), 25)
+        self.assertEqual(result["accessed_from_truncated"], 40)
+
+
+class SamplesTests(unittest.TestCase):
+    def setUp(self):
+        self.provider = DocumentationProvider()
+
+    def test_each_sample_gets_its_own_url(self):
+        # Regression: the href was searched across the whole section, so every
+        # sample row inherited the first row's link.
+        html = _sectioned(
+            (
+                "Samples",
+                "<table>"
+                "<tr><th>Name</th><th>Description</th></tr>"
+                '<tr><td><a href="first.htm">First</a></td><td>One.</td></tr>'
+                '<tr><td><a href="second.htm">Second</a></td><td>Two.</td></tr>'
+                "</table>",
+            )
+        )
+        samples = self.provider._extract_all_sections(
+            html, "https://example.invalid", "Sketch", None
+        )["samples"]
+        urls = [s["url"] for s in samples]
+        self.assertEqual(len(set(urls)), 2)
+        self.assertTrue(urls[0].endswith("/first.htm"))
+        self.assertTrue(urls[1].endswith("/second.htm"))
+
+
 if __name__ == "__main__":
     unittest.main()

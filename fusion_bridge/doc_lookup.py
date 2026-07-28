@@ -139,6 +139,10 @@ def _classify_hit(kind, namespace_name, cls, member_name, member_obj):
 
 # ── DocumentationProvider ────────────────────────────────────────────────
 
+# Widely used classes are reachable from hundreds of members; listing them all
+# buries the useful parts of the page in noise.
+_MAX_ACCESSED_FROM = 25
+
 
 class DocumentationProvider:
     """Encapsulates guide file path, HTML scraping, and introspection."""
@@ -335,10 +339,48 @@ class DocumentationProvider:
                     result["return_type"] = rows[0].get("type", "")
                     result["return_description"] = rows[0].get("description", "")
 
+            elif heading == "property value":
+                # Property pages carry a prose sentence here instead of the
+                # table that method pages use, e.g. "This is a read only
+                # property whose value is a Profiles."
+                text = _strip_tags(body)
+                if text:
+                    result["property_description"] = text
+                type_m = re.search(r'<a [^>]*href="[^"]*">([^<]+)</a>', body)
+                if type_m:
+                    result["property_type"] = type_m.group(1)
+                access_m = re.search(r"read(?:/write|\s+only)", text, re.IGNORECASE)
+                if access_m:
+                    result["access"] = access_m.group(0).lower()
+
+            elif heading in ("methods", "properties"):
+                # Class pages list their members in two-column tables; this is
+                # the most useful part of the page for an agent exploring the
+                # API, and was previously discarded.
+                rows = _extract_table_rows(body, ("name", "description"))
+                if rows:
+                    result[heading] = rows
+
+            elif heading == "accessed from":
+                refs = re.findall(r"<a [^>]*href=\"[^\"]*\">([^<]+)</a>", body)
+                if refs:
+                    result["accessed_from"] = refs[:_MAX_ACCESSED_FROM]
+                    if len(refs) > _MAX_ACCESSED_FROM:
+                        result["accessed_from_truncated"] = len(refs)
+
             elif heading == "samples":
                 samples = []
-                for row in _extract_table_rows(body, ("name", "description")):
-                    href = re.search(r'href="([^"]+)"', body)
+                for raw_row in re.findall(r"<tr[^>]*>(.*?)</tr>", body, re.DOTALL)[1:]:
+                    cells = re.findall(r"<td[^>]*>(.*?)</td>", raw_row, re.DOTALL)
+                    if len(cells) < 2:
+                        continue
+                    row = {
+                        "name": _strip_tags(cells[0]),
+                        "description": _strip_tags(cells[1]),
+                    }
+                    # Look for the link inside this row; searching the whole
+                    # section gave every sample the first row's URL.
+                    href = re.search(r'href="([^"]+)"', raw_row)
                     if href:
                         row["url"] = f"{self._AUTODESK_HELP}/{href.group(1)}"
                     samples.append(row)
@@ -353,6 +395,15 @@ class DocumentationProvider:
         )
         if syntax_m:
             result["syntax"] = f"{syntax_m.group(2)}({syntax_m.group(3)})"
+        else:
+            # Property pages use "propertyValue = obj.<b>name" with no
+            # argument list, and Autodesk leaves the tag unclosed, so the
+            # closing tag cannot be required here.
+            property_m = re.search(
+                r"propertyValue\s*=\s*\w+\.<(?:strong|b)>(\w+)", html
+            )
+            if property_m:
+                result["syntax"] = property_m.group(1)
 
         return result
 
