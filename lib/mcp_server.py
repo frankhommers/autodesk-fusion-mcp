@@ -6,7 +6,8 @@ Author: Frank Hommers
 Created: 2026-01-23
 
 Standalone MCP server that runs inside the Autodesk Fusion add-in.
-Implements the MCP Streamable HTTP transport (spec 2025-03-26).
+Implements the MCP Streamable HTTP transport, negotiating any of the
+2025-11-25, 2025-06-18 and 2025-03-26 protocol revisions.
 
 MCP clients connect directly:
   {"mcpServers": {"autodesk-fusion-mcp": {"type": "http", "url": "http://localhost:8765/mcp"}}}
@@ -35,14 +36,40 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 
-# MCP Protocol version
-MCP_PROTOCOL_VERSION = "2025-03-26"
+# MCP protocol versions this server can speak, newest first.
+#
+# The transport and the tools/* surface are unchanged across these revisions,
+# so a single implementation satisfies all three.  Note that 2025-06-18 dropped
+# JSON-RPC batching; we still accept batches because being lenient costs
+# nothing and older clients rely on it.
+SUPPORTED_PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
+
+# Version we advertise when a client asks for something we do not recognise.
+MCP_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0]
+
+# Version to assume when a client omits the MCP-Protocol-Version header on
+# requests after initialize, per the 2025-06-18 backwards-compatibility rule.
+DEFAULT_PROTOCOL_VERSION = "2025-03-26"
 
 # Server info
-SERVER_INFO = {"name": "autodesk-fusion-mcp", "version": "1.0.0"}
+SERVER_INFO = {"name": "autodesk-fusion-mcp", "version": "1.1.0"}
 
 # Server capabilities
 SERVER_CAPABILITIES = {"tools": {}, "resources": {}}
+
+
+def negotiate_protocol_version(requested):
+    """Return the protocol version to use for a session.
+
+    The MCP lifecycle spec requires the server to echo back the version the
+    client asked for when it supports it, and otherwise to reply with a
+    version it does support -- the client then decides whether to continue or
+    disconnect.  Previously this server always answered "2025-03-26", which
+    made stricter clients drop the connection.
+    """
+    if requested in SUPPORTED_PROTOCOL_VERSIONS:
+        return requested
+    return MCP_PROTOCOL_VERSION
 
 
 class MCPServer:
@@ -253,6 +280,7 @@ class MCPServer:
                     "version": SERVER_INFO["version"],
                     "git_commit": server_ref.git_commit,
                     "protocol": MCP_PROTOCOL_VERSION,
+                    "supported_protocols": list(SUPPORTED_PROTOCOL_VERSIONS),
                     "uptime_seconds": int(time.time() - server_ref._start_time)
                     if server_ref._start_time
                     else None,
@@ -352,6 +380,19 @@ class MCPServer:
                     self.send_response(406)
                     self.end_headers()
                     return
+
+                # Clients on 2025-06-18 and later echo the negotiated version
+                # on every follow-up request; its absence implies 2025-03-26.
+                # A mismatch is logged rather than rejected with 400, so a
+                # client running ahead of this server still gets served.
+                header_version = self.headers.get(
+                    "MCP-Protocol-Version", DEFAULT_PROTOCOL_VERSION
+                )
+                if header_version not in SUPPORTED_PROTOCOL_VERSIONS:
+                    server_ref.log(
+                        f"Unsupported MCP-Protocol-Version header "
+                        f"{header_version}, continuing anyway"
+                    )
 
                 # Read request body (supports both Content-Length and chunked transfer encoding)
                 body = self._read_request_body()
@@ -462,7 +503,8 @@ class MCPServer:
                         new_session_id = str(uuid.uuid4())
                         with server_ref.sessions_lock:
                             server_ref.sessions[new_session_id] = {
-                                "created_at": time.time()
+                                "created_at": time.time(),
+                                "protocol_version": result.get("protocolVersion"),
                             }
                         server_ref.log(f"New session: {new_session_id}")
 
@@ -562,9 +604,19 @@ class MCPServer:
 
             def _handle_initialize(self, params):
                 """Handle MCP initialize request."""
-                server_ref.log(f"Client initialized: {params.get('clientInfo', {})}")
+                requested = params.get("protocolVersion")
+                negotiated = negotiate_protocol_version(requested)
+                if requested and requested != negotiated:
+                    server_ref.log(
+                        f"Client requested unsupported protocol {requested}; "
+                        f"offering {negotiated}"
+                    )
+                server_ref.log(
+                    f"Client initialized: {params.get('clientInfo', {})} "
+                    f"(protocol {negotiated})"
+                )
                 return {
-                    "protocolVersion": MCP_PROTOCOL_VERSION,
+                    "protocolVersion": negotiated,
                     "capabilities": SERVER_CAPABILITIES,
                     "serverInfo": SERVER_INFO,
                 }

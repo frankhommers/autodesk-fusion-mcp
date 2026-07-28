@@ -5,7 +5,7 @@
 	"description": {
 		"": "Standalone MCP server for AI control of Autodesk Fusion - no external dependencies"
 	},
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"runOnStartup": true,
 	"supportedOS": "windows|mac",
 	"editEnabled": true

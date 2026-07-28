@@ -1,14 +1,16 @@
 # Autodesk Fusion MCP Server
 
-Standalone MCP server that runs inside Autodesk Fusion as an add-in.
-AI agents connect over **Streamable HTTP** -- the current MCP transport
-specification (2025-03-26) -- with no external proxy, middleware, or
+Standalone MCP server that runs inside Autodesk Fusion (formerly Autodesk
+Fusion 360) as an add-in. AI agents connect over **Streamable HTTP** -- the
+current MCP transport specification -- with no external proxy, middleware, or
 dependencies required.
 
 ## Highlights
 
 - **Streamable HTTP transport** -- implements the MCP Streamable HTTP spec
   natively; no legacy SSE polling or sidecar servers.
+- **Protocol negotiation** -- speaks the `2025-11-25`, `2025-06-18` and
+  `2025-03-26` revisions and agrees on whichever the client asks for.
 - **Zero external dependencies** -- uses only Python's standard library and
   the Fusion SDK (`adsk.*`).
 - **Thread-safe bridge** -- HTTP requests are relayed to Fusion's main thread
@@ -163,6 +165,17 @@ Frank Hommers / [Initialize](https://initialize.nl)
 This project is licensed under the terms of the MIT license. See [LICENSE](LICENSE).
 
 ## Changelog
+
+- v 1.1.0
+  - Negotiate the MCP protocol version instead of always answering
+    `2025-03-26`; `2025-11-25` and `2025-06-18` are now supported, which fixes
+    clients refusing to connect ([#1](https://github.com/frankhommers/autodesk-fusion-mcp/issues/1))
+  - Tolerate the `MCP-Protocol-Version` request header introduced in 2025-06-18
+  - `/health` now reports `supported_protocols`
+  - Fixed `fetch_online_documentation` silently dropping the `syntax` field
+    after Autodesk changed its help markup from `<strong>` to `<b>`
+  - Per-command execution duration and ISO 8601 timestamps in the log
+  - CI now runs on Python 3.14, matching the interpreter Fusion bundles
 
 - v 1.0.0
   - Initial release

@@ -11,10 +11,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Mirrors the interpreter Autodesk Fusion bundles, so CI exercises the
+      # same Python the add-in actually runs on. Bump this when Fusion does.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Run unit tests
         run: python -m unittest discover -s tests
