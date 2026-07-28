@@ -387,6 +387,20 @@ class DocumentationProvider:
                 if samples:
                     result["samples"] = samples
 
+        # Autodesk flags preview functionality with a test-tube icon in the
+        # heading and a <p class="api-preview"> banner. Preview classes are
+        # renamed or removed between releases without a deprecation period, so
+        # surfacing this is more consequential than anything else on the page.
+        # The icon must be taken from the <h1> only: a stable class that merely
+        # *contains* preview members carries the same icon in its member table,
+        # which would otherwise flag the whole class as preview.
+        title_m = re.search(r"<h1[^>]*>.*?</h1>", html, re.DOTALL)
+        title_html = title_m.group(0) if title_m else ""
+        result["preview"] = bool(
+            re.search(r'class="api-preview"', html)
+            or re.search(r'<img[^>]+alt="Preview"', title_html)
+        )
+
         # Syntax (outside h2 structure)
         # Autodesk switched the emphasis tag from <strong> to <b> in 2025;
         # accept either so the syntax line keeps resolving on both layouts.

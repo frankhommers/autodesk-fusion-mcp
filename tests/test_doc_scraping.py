@@ -226,6 +226,61 @@ class ClassPageTests(unittest.TestCase):
         self.assertEqual(result["accessed_from_truncated"], 40)
 
 
+class PreviewFlagTests(unittest.TestCase):
+    """Preview classes get renamed without deprecation, so callers need this."""
+
+    def setUp(self):
+        self.provider = DocumentationProvider()
+
+    def _preview(self, html):
+        return self.provider._extract_all_sections(
+            html, "https://example.invalid", "FoldFeature", None
+        )["preview"]
+
+    def test_api_preview_banner_is_detected(self):
+        html = _sectioned(
+            ("Description", '<p class="api-preview">This is in preview.</p>')
+        )
+        self.assertTrue(self._preview(html))
+
+    def test_test_tube_icon_is_detected(self):
+        html = (
+            '<h1 class="api">FoldFeature Object '
+            '<img src="../images/TestTubeLarge.png" alt="Preview"></h1>'
+        ) + _sectioned(("Description", '<p class="api">A fold.</p>'))
+        self.assertTrue(self._preview(html))
+
+    def test_stable_page_is_not_flagged(self):
+        html = _sectioned(("Description", '<p class="api">An extrude.</p>'))
+        self.assertFalse(self._preview(html))
+
+    def test_stable_class_containing_preview_members_is_not_flagged(self):
+        # Sketch is stable but lists preview members, each carrying the same
+        # test-tube icon in the member table. Scanning the whole page for the
+        # icon marked Sketch itself as preview.
+        html = (
+            '<h1 class="api">Sketch Object</h1>'
+            + _sectioned(
+                (
+                    "Methods",
+                    "<table><tr><th>Name</th><th>Description</th></tr>"
+                    '<tr><td>autoConstrain</td><td class="api-list">'
+                    '<img src="../images/TestTubeSmall.png" alt="Preview">'
+                    "Auto constrains the sketch.</td></tr></table>",
+                )
+            )
+        )
+        self.assertFalse(self._preview(html))
+
+    def test_flag_is_always_present(self):
+        result = self.provider._extract_all_sections(
+            _page(""), "https://example.invalid", "Sketch", None
+        )
+        # Absence would be ambiguous: unset could mean "not preview" or
+        # "parser did not look", so the key is always emitted.
+        self.assertIn("preview", result)
+
+
 class SamplesTests(unittest.TestCase):
     def setUp(self):
         self.provider = DocumentationProvider()

@@ -1,6 +1,12 @@
 # Fusion Design Guide
 
-Use this guide when driving Autodesk Fusion through the `autodesk_fusion` MCP tool.
+Use this guide when driving Autodesk Fusion through this MCP server.
+
+Each capability is its own tool -- `call_autodesk_api`, `execute_python`,
+`capture_viewport`, `get_active_selection`, `fetch_api_documentation`,
+`fetch_online_documentation`, `fetch_design_guide` and the `*_script` tools.
+The JSON blocks below show the arguments for the named tool; there is no
+wrapping `operation` field.
 
 ## 1. Respect the Existing Design First
 
@@ -12,9 +18,10 @@ Before making any changes, inspect the open design and follow its established co
 - If the design uses a particular unit system, stay consistent.
 - Only fall back to the defaults in this guide when starting a brand-new design.
 
+`execute_python`:
+
 ```json
 {
-  "operation": "execute_python",
   "description": "inspect existing design conventions",
   "code": "design = app.activeProduct\nprint(f'Units: {design.unitsManager.defaultLengthUnits}')\nprint(f'Components: {design.rootComponent.occurrences.count}')\nfor p in design.userParameters:\n    print(f'  Param: {p.name} = {p.expression}')"
 }
@@ -152,26 +159,31 @@ except Exception:
 1. Call `fetch_api_documentation` to discover likely classes, methods, or properties.
 2. Call `fetch_online_documentation` when you need parameter tables, return types, or Autodesk samples.
 
-Example discovery request:
+Example discovery request, `fetch_api_documentation`:
 
 ```json
 {
-  "operation": "fetch_api_documentation",
   "search_term": "ExtrudeFeature",
   "category": "class_name",
   "max_results": 5
 }
 ```
 
-Example reference request:
+Example reference request, `fetch_online_documentation`:
 
 ```json
 {
-  "operation": "fetch_online_documentation",
   "class_name": "ExtrudeFeatures",
   "member_name": "createInput"
 }
 ```
+
+The reply adapts to the kind of page Autodesk serves. Method pages return
+`syntax`, `return_type` and `parameters`; property pages return
+`property_type` and `access`; class pages return `methods`, `properties` and
+`accessed_from`, which is the fastest way to survey an unfamiliar class.
+Every reply carries a `preview` boolean -- see section 17 before building on
+anything it marks as true.
 
 ## 14. Use Python Sessions for Investigation
 
@@ -179,11 +191,10 @@ Example reference request:
 - Put important final values into `_mcp_result` or `print()` them so the caller can inspect outcomes.
 - Avoid UI prompts in scripts because modal dialogs block automation.
 
-Example session:
+Example session, `execute_python`:
 
 ```json
 {
-  "operation": "execute_python",
   "description": "inspect active design units",
   "session_id": "inspection",
   "persistent": true,
@@ -197,11 +208,10 @@ Example session:
 - Use `return_properties` on generic API calls when you need confirmation without writing a full script.
 - If the result looks wrong, clear assumptions about stored objects before retrying.
 
-Viewport example:
+Viewport example, `capture_viewport`:
 
 ```json
 {
-  "operation": "capture_viewport",
   "width": 1200,
   "height": 900
 }
@@ -213,7 +223,105 @@ Viewport example:
 - Clear the stored object context when switching to a new modeling task.
 - Prefer semantic names like `base_sketch`, `mount_body`, or `top_face_ref`.
 
-## 17. Common Failure Patterns
+## 17. Treat Preview APIs as Unstable
+
+Roughly one in six `adsk.fusion` classes is marked "in preview state". Autodesk
+renames and removes these between releases without a deprecation period, so
+code that works today can break on the next update.
+
+- Check before relying on a class: `fetch_online_documentation` returns a
+  `preview` boolean for every class, method and property.
+- Do not try to detect this at runtime. The preview warning is stripped from
+  the compiled modules, so `cls.__doc__` looks identical for preview and
+  stable classes -- it survives only in Autodesk's own documentation.
+- Guard optional features with `hasattr` rather than assuming they exist.
+- Prefer a stable equivalent when one exists.
+- When only a preview API will do, isolate it behind one small function so a
+  rename touches a single place.
+
+```json
+{
+  "class_name": "FoldFeature"
+}
+```
+
+```python
+# Runtime guard, since the class may simply be absent on older versions.
+if not hasattr(comp.features, "foldFeatures"):
+    raise RuntimeError("Fold features are unavailable in this Fusion version")
+```
+
+This is not hypothetical. Between Fusion 2703 and 2704 the sheet metal corner
+closure classes were renamed outright -- `CornerClosureFeatureDefinition`
+became `CornerClosureDefinition`, `TwoBendCornerClosureInputDefinition` became
+`TwoBendCornerClosureDefinition`, and so on. Twenty of the twenty-three classes
+added in 2704 are preview.
+
+## 18. Sheet Metal Follows a Fixed Order
+
+Sheet metal modeling is order-sensitive: the rule governs thickness and bend
+allowance, so it must be set before geometry is created, and the flat pattern
+must come last.
+
+1. Set the sheet metal rule on the component.
+2. Create the base geometry, working inside a component as in section 4.
+3. Fold along sketch lines.
+4. Close corners and join edges.
+5. Create the flat pattern.
+
+Rules live on the design; the active one is a component property:
+
+```python
+rules = design.designSheetMetalRules          # rules stored in this document
+library = design.librarySheetMetalRules       # shipped library
+comp.activeSheetMetalRule = library.itemByName("Aluminum (mm)")
+```
+
+Folds are built from an input, with bend lines added one at a time. Note that
+`bendAngle` is a `ValueInput`, and `linePosition` says where the sketch line
+sits relative to the bend:
+
+```python
+folds = comp.features.foldFeatures
+fold_input = folds.createInput(stationary_face)          # BRepFace that stays put
+fold_input.bendLines.add(
+    sketch_line,                                          # SketchLine
+    adsk.core.ValueInput.createByString("90 deg"),
+    adsk.fusion.FoldBendLinePositionTypes.CenterFoldBendLinePositionType,
+    True,                                                 # allowBendRelief
+)
+fold_input.isUseCornerRelief = True
+fold = folds.add(fold_input)
+fold.name = "Front_Lip"
+```
+
+Corner closures and joins take two edges each:
+
+```python
+closures = comp.features.cornerClosureFeatures
+closures.add(closures.createInput(dominant_edge, submissive_edge))
+
+joins = comp.features.joinByBendFeatures
+join_input = joins.createInput(edge_one, edge_two)
+join_input.isUseSheetMetalRuleBendRadius = True
+joins.add(join_input)
+```
+
+The flat pattern is generated from a face that stays flat, and is reachable
+afterwards through the component:
+
+```python
+comp.createFlatPattern(stationary_face)
+flat = comp.flatPattern
+print(flat.flatBody.name, flat.bendLinesBody.name)
+```
+
+Everything in this section except `unfoldFeatures` and `refoldFeatures` is
+preview API -- apply section 17 before depending on it. Signatures here were
+read from Fusion 2704.1.36; verify with `fetch_online_documentation` if your
+version differs.
+
+## 19. Common Failure Patterns
 
 - Modeling directly in rootComponent instead of creating a dedicated component.
 - Hardcoded dimensions instead of user parameters.
@@ -223,3 +331,6 @@ Viewport example:
 - A stored reference points at an object from an earlier design state.
 - A feature succeeds, but unnamed result bodies make the next step ambiguous.
 - Ignoring existing design conventions and introducing inconsistent naming or units.
+- Depending on a preview class that was renamed in a newer Fusion release.
+- Creating sheet metal geometry before setting the active sheet metal rule.
+- Generating the flat pattern before folds and corner closures are complete.
