@@ -242,6 +242,7 @@ class MCPServer:
                     self._handle_health()
                 else:
                     self.send_response(404)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
 
             def do_POST(self):
@@ -251,6 +252,7 @@ class MCPServer:
                     self._handle_mcp_post()
                 else:
                     self.send_response(404)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
 
             def do_DELETE(self):
@@ -263,9 +265,11 @@ class MCPServer:
                             server_ref.sessions.pop(session_id, None)
                         server_ref.log(f"Session terminated: {session_id}")
                     self.send_response(200)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
                 else:
                     self.send_response(404)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
 
             # ----------------------------------------------------------
@@ -301,6 +305,7 @@ class MCPServer:
                 accept = self.headers.get("Accept", "")
                 if "text/event-stream" not in accept:
                     self.send_response(406)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
 
@@ -310,6 +315,7 @@ class MCPServer:
                     with server_ref.sessions_lock:
                         if session_id not in server_ref.sessions:
                             self.send_response(404)
+                            self.send_header("Content-Length", "0")
                             self.end_headers()
                             return
 
@@ -378,6 +384,7 @@ class MCPServer:
                     and "*/*" not in accept
                 ):
                     self.send_response(406)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
 
@@ -458,6 +465,7 @@ class MCPServer:
 
                 if not requests:
                     self.send_response(202)
+                    self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
 
