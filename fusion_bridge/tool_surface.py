@@ -14,6 +14,7 @@ LOAD_SCRIPT = "load_script"
 LIST_SCRIPTS = "list_scripts"
 DELETE_SCRIPT = "delete_script"
 GET_ACTIVE_SELECTION = "get_active_selection"
+MANAGE_ANNOTATIONS = "manage_annotations"
 
 # Resource constants
 RESOURCE_URI = "fusion://design-guide"
@@ -340,6 +341,31 @@ TOOL_DEFINITIONS = [
             "properties": {},
         },
     },
+    {
+        "name": MANAGE_ANNOTATIONS,
+        "description": (
+            "Read and process the user's session-only selection annotations in the active document. "
+            "list is read-only; claim requires id and current revision, locks editing/deletion, and returns "
+            "a private claim_token and $references to the captured objects. Claim before working. "
+            "complete requires id, claim_token and result; marks done and unlocks. "
+            "On failure, cancellation or abandonment, release with id, claim_token and result explaining "
+            "what happened; this unlocks and marks failed for user review. Never leave a claim unfinished. "
+            "Do not act on annotations claimed by another agent. No automatic agent execution or timeout. "
+            "Keep the same active document while working. References expire on completion/release."
+        ),
+        "inputSchema": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "action": {"type": "string", "enum": ["list", "claim", "complete", "release"]},
+                "id": {"type": "string", "description": "Annotation ID from list."},
+                "revision": {"type": "integer", "minimum": 1, "description": "Required for claim; use revision from list."},
+                "claim_token": {"type": "string", "description": "Token returned by your claim; required to complete/release."},
+                "result": {"type": "string",
+                           "description": "Required to complete/release. User-visible summary or failure reason."},
+            },
+            "required": ["action"],
+        },
+    },
 ]
 
 _TOOL_NAMES = {t["name"] for t in TOOL_DEFINITIONS}
@@ -360,6 +386,7 @@ def build_tool_handlers(
     list_scripts,
     delete_script,
     get_active_selection,
+    manage_annotations,
 ):
     """Build a dict mapping tool name to handler function.
 
@@ -380,6 +407,7 @@ def build_tool_handlers(
         LIST_SCRIPTS: list_scripts,
         DELETE_SCRIPT: delete_script,
         GET_ACTIVE_SELECTION: get_active_selection,
+        MANAGE_ANNOTATIONS: manage_annotations,
     }
     if set(handlers) != _TOOL_NAMES:
         raise RuntimeError(f"Handler registry mismatch: {set(handlers) ^ _TOOL_NAMES}")

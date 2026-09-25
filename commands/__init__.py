@@ -4,8 +4,10 @@
 # MCP About command - shows information about the add-in
 from .mcpAbout import mcp_about_command as mcpAbout
 
+from .selectionAnnotations import command as selectionAnnotations
+
 # Active commands list
-commands = [mcpAbout]
+commands = [mcpAbout, selectionAnnotations]
 
 
 # Assumes you defined a "start" function in each of your modules.

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" data-theme="dark-blue">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Selection annotations</title>
+<style>
+:root {font:12px Arial, sans-serif; --text:#333; --muted:#656565; --line:#ccc; --hover:#e1e1e1; --accent:#0078b8; --error:#ad3d2c; --success:#287645}
+:root[data-theme="dark-blue"] {--text:#e1e7eb; --muted:#aebcc5; --line:#526570; --hover:#3d5362; --accent:#48b5d3; --error:#ffb39f; --success:#99d1af}
+:root[data-theme="dark-gray"] {--text:#e5e5e5; --muted:#b4b4b4; --line:#5a5a5a; --hover:#484848; --accent:#48b5d3; --error:#ffb39f; --success:#99d1af}
+* {box-sizing:border-box}
+html {margin:0; min-height:100%; background:transparent !important}
+body {margin:0; min-height:100vh; color:var(--text) !important}
+body {padding:10px 12px; font:12px Arial, sans-serif}
+h2 {font-size:12px; font-weight:600; margin:0 0 10px}
+p {line-height:1.4; margin:8px 0}
+.muted {color:var(--muted); font-size:11px}
+#document, #selection {overflow-wrap:anywhere}
+#document {padding-bottom:8px; border-bottom:1px solid var(--line)}
+section {padding:12px 0; margin:0 0 12px; border-bottom:1px solid var(--line)}
+article {padding:12px 0; border-bottom:1px solid var(--line)}
+label {display:block; margin:10px 0 5px}
+textarea {display:block; width:100%; resize:vertical; min-height:64px; padding:6px; border:1px solid var(--line); border-radius:2px; font:inherit; color:var(--text); background:transparent}
+textarea::placeholder {color:var(--muted)}
+button {font:inherit; min-height:25px; padding:3px 9px; border-radius:2px; background:transparent; border:1px solid var(--line); color:var(--text); cursor:pointer}
+button:hover:not(:disabled) {background:var(--hover)}
+button:disabled {opacity:.4; cursor:default}
+button.primary {border-color:var(--accent)}
+button:focus-visible, textarea:focus-visible {outline:1px solid var(--accent); outline-offset:1px}
+.row {display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.between {justify-content:space-between}
+.badge {font-size:11px; color:var(--muted)}
+.badge.done {color:var(--success)}
+.badge.in_progress {color:var(--accent)}
+.badge.failed {color:var(--error)}
+.note, .result {white-space:pre-wrap; overflow-wrap:anywhere}
+.result {color:var(--muted); font-size:11px}
+.icon {width:27px; padding:3px; margin-left:auto; display:inline-flex; align-items:center; justify-content:center}
+#error {color:var(--error); white-space:pre-wrap; overflow-wrap:anywhere; margin-top:6px}
+#notice {color:var(--accent); margin-top:6px}
+[hidden] {display:none!important}
+</style>
+</head>
+<body>
+<div id="document" class="muted">Connecting…</div>
+<div id="error" role="alert"></div>
+<div id="notice" role="status"></div>
+<section id="editor">
+<h2 id="editor-title">New annotation</h2>
+<button id="capture" type="button">Capture selection</button>
+<p id="selection" class="muted">Select objects in Fusion, then capture the selection.</p>
+<label for="text">Comment</label>
+<textarea id="text" maxlength="10000" placeholder="Describe what needs to change."></textarea>
+<div class="row" style="margin-top:8px">
+<button id="save" class="primary" type="button">Add</button>
+<button id="cancel" type="button" hidden>Cancel</button>
+</div>
+</section>
+<div class="row between"><h2 style="margin:0">Annotations</h2><button id="refresh" type="button">Refresh</button></div>
+<div id="items"></div>
+<p class="muted">Session only. Ask your agent to process open annotations.</p>
+<script src="palette.js"></script>
+</body>
+</html>

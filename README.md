@@ -16,7 +16,7 @@ dependencies required.
   the Fusion SDK (`adsk.*`).
 - **Thread-safe bridge** -- HTTP requests are relayed to Fusion's main thread
   via a Custom Event / work-queue dispatcher, preventing crashes.
-- **13 dedicated MCP tools** -- each with a clean, focused schema for better
+- **14 dedicated MCP tools** -- each with a clean, focused schema for better
   LLM tool selection.
 
 ## Supported Platforms
@@ -75,6 +75,7 @@ Add to your MCP client config (Claude Desktop, Cursor, etc.):
 | `get_viewport` | Read camera state and viewport dimensions |
 | `set_viewport` | Standard views, projection, orbit, pan, zoom, fit and camera restoration |
 | `get_active_selection` | Get objects currently selected in the viewport |
+| `manage_annotations` | List, claim, complete or release session-only selection annotations |
 | `fetch_api_documentation` | Search Fusion API metadata via runtime introspection |
 | `fetch_online_documentation` | Fetch Autodesk cloudhelp docs for a class/member |
 | `fetch_design_guide` | Read the bundled design guide |
@@ -103,6 +104,51 @@ Constructors accepted in args: `Point3D`, `Vector3D`, `Point2D`,
 The `get_active_selection` tool returns details of objects selected in the
 viewport and stores them as `$selection_0`, `$selection_1`, etc. for use in
 follow-up API calls.
+
+### Selection annotations
+
+Open **Selection annotations** from the Design workspace's **Utilities → Add-Ins**
+panel. Select objects in Fusion, click **Capture selection**, type a
+note, and click **Add**. The captured selection stays attached even when
+you select something else. Ask your agent to process the open annotations.
+Adding a note does not automatically start an agent.
+
+Annotations are grouped by document and live only in memory. Closing a document,
+stopping the add-in, or exiting Fusion discards them. Closing the palette does
+not discard them; reopen it from the toolbar. Nothing is written to the design.
+
+- **Open:** editable and removable.
+- **In progress:** claimed by an agent; editing, reactivation and deletion
+  are blocked in both the UI and backend.
+- **Completed:** retained with the agent's result. Delete it with the trash
+  button, or choose **Edit / Reactivate** and save to reopen it.
+- **Interrupted / failed:** released by the agent after failure/cancellation;
+  retained for review, editing/reactivation or deletion.
+
+The agent workflow uses `manage_annotations`:
+
+1. `{"action":"list"}` returns annotations for the active document without
+   claiming or consuming them.
+2. `{"action":"claim","id":"…","revision":1}` atomically claims an open
+   annotation and returns its `claim_token` and captured-object `$references`.
+3. Work with those references in the same active document. Do not use
+   `clear_context` while references are needed. Other agents must not work on
+   claimed annotations.
+4. `{"action":"complete","id":"…","claim_token":"…","result":"…"}` marks it
+   done. On failure, cancellation or abandonment, use `"action":"release"`
+   instead and explain what happened in `result`. References are removed at
+   completion/release; the captured objects remain attached to the annotation.
+
+Always complete or release a claim, including when stopping early. A lock has
+**no automatic timeout**: silence does not prove the agent has stopped. If an
+agent crashes before releasing, resume it to release the claim; as a last
+resort, stop the agent and restart the add-in (this clears all annotations).
+A released annotation is not automatically retried. The user reactivates it.
+
+Edits use revision checks, so an old UI cannot overwrite a newer annotation.
+If geometry has been deleted or invalidated, claiming it is rejected; edit the
+annotation and capture its selection again. Annotations do not freeze geometry
+or prevent ordinary modeling changes by the user or other agents.
 
 ## Architecture
 
