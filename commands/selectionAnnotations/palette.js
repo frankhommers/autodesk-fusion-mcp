@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 let current = {document_id:null, annotations:[]};
 let captureId = null, editing = null, busy = false, polling = false, generation = 0;
-const labels = {open:"Open", in_progress:"In progress · Locked", done:"Completed", failed:"Interrupted / failed", aborted:"Aborted"};
+const labels = {open:"Open", in_progress:"In progress · Locked", done:"Completed", failed:"Interrupted / failed"};
 
 async function request(action, data = {}) {
     const raw = await window.adsk.fusionSendData(action, JSON.stringify(data));
@@ -72,9 +72,7 @@ function render() {
     if (!current.annotations.length) root.append(node("p", "No annotations in this document.", "muted"));
     for (const item of current.annotations) {
         const card = node("article");
-        const abortPending = item.status === "in_progress" && item.abort_requested;
-        card.append(node("span", abortPending ? "Abort requested · Locked" : labels[item.status], `badge ${item.status}`));
-        if (abortPending) card.append(node("p", "Waiting for the agent to stop. Running operations may finish first.", "muted"));
+        card.append(node("span", labels[item.status], `badge ${item.status}`));
         card.append(node("p", item.text, "note"));
         card.append(node("p", selectionLabel(item.selections), "muted"));
         if (item.selections.some(s => !s.valid)) card.append(node("p", "Selection is no longer valid. Edit this annotation to capture it again.", "muted"));
@@ -86,17 +84,11 @@ function render() {
             return b;
         }
         button("Show selection", () => act(async () => applyState(await request("select", {id:item.id, document_id:current.document_id}))));
-        if (item.status === "in_progress") {
-            const abort = button(abortPending ? "Abort requested" : "Abort", () => act(async () => {
-                applyState(await request("abort", {id:item.id, revision:item.revision, document_id:current.document_id}));
-            }), !!item.abort_requested);
-            abort.title = "Ask the agent to stop. Existing changes are not undone.";
-        }
         button(item.status === "open" ? "Edit" : "Edit / Reactivate", () => edit(item), item.status === "in_progress");
         const remove = button("Delete", () => act(async () => {
             applyState(await request("delete", {id:item.id, revision:item.revision, document_id:current.document_id}));
             if (editing?.id === item.id) resetEditor();
-        }), item.status === "in_progress");
+        }));
         remove.className = "icon";
         remove.title = "Delete annotation";
         remove.setAttribute("aria-label", "Delete annotation");

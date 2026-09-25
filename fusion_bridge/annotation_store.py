@@ -24,7 +24,7 @@ class AnnotationStore:
             raise ValueError("Capture at least one selected object.")
         item = dict(id=uuid4().hex, document=document, text=text,
                     entities=list(entities), status="open", revision=1,
-                    result="", claim_token=None, abort_requested=False)
+                    result="", claim_token=None, dismissed=False)
         self.items[item["id"]] = item
         return item
 
@@ -51,14 +51,20 @@ class AnnotationStore:
         text = self.text(text)
         if entities is not None and not entities:
             raise ValueError("Capture at least one selected object.")
-        item.update(text=text, status="open", result="", abort_requested=False, revision=item["revision"] + 1)
+        item.update(text=text, status="open", result="", revision=item["revision"] + 1)
         if entities is not None:
             item["entities"] = list(entities)
         return item
 
     def delete(self, item_id, document, revision):
-        self.editable(item_id, document, revision)
-        del self.items[item_id]
+        item = self.get(item_id, document)
+        self.check_revision(item, revision)
+        if item["status"] == "in_progress":
+            # Hide immediately, retaining the claim until its owner finishes.
+            # Removing a UI row must not interrupt the client's ongoing work.
+            item["dismissed"] = True
+        else:
+            del self.items[item_id]
 
     def claim(self, item_id, document, revision):
         item = self.get(item_id, document)
@@ -69,27 +75,13 @@ class AnnotationStore:
                     revision=item["revision"] + 1)
         return item
 
-    def request_abort(self, item_id, document, revision):
-        item = self.get(item_id, document)
-        self.check_revision(item, revision)
-        if item["status"] != "in_progress":
-            raise ValueError("Only in-progress annotations can be aborted.")
-        if not item["abort_requested"]:
-            item.update(abort_requested=True, revision=item["revision"] + 1)
-        return item
-
-    def check_claim(self, item_id, document, token):
+    def finish(self, item_id, document, token, result, failed=False):
         item = self.get(item_id, document)
         if item["status"] != "in_progress" or not token or token != item["claim_token"]:
-            raise ValueError("A current claim token is required for this annotation.")
-        return item
-
-    def finish(self, item_id, document, token, result, failed=False):
-        item = self.check_claim(item_id, document, token)
-        if item["abort_requested"] and not failed:
-            raise ValueError("Abort requested. Stop work and release the claim with a summary of partial changes.")
+            raise ValueError("A current claim token is required to finish this annotation.")
         result = self.text(result)
-        status = "aborted" if item["abort_requested"] else "failed" if failed else "done"
-        item.update(status=status, result=result,
+        item.update(status="failed" if failed else "done", result=result,
                     claim_token=None, revision=item["revision"] + 1)
+        if item["dismissed"]:
+            del self.items[item_id]
         return item

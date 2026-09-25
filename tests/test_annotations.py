@@ -16,12 +16,11 @@ class StoreTests(unittest.TestCase):
         self.item = self.store.create("doc", "Round these edges", [object()])
         self.id = self.item["id"]
 
-    def test_claim_blocks_all_user_mutations_and_second_agent(self):
+    def test_claim_blocks_editing_and_second_agent(self):
         self.store.claim(self.id, "doc", 1)
         revision = self.item["revision"]
         for operation in (
             lambda: self.store.edit(self.id, "doc", revision, "changed"),
-            lambda: self.store.delete(self.id, "doc", revision),
             lambda: self.store.claim(self.id, "doc", revision),
         ):
             with self.assertRaises(ValueError):
@@ -136,9 +135,8 @@ class BridgeTests(unittest.TestCase):
         claimed = self.tool(action="claim", id=item["id"], revision=1)
         ref = claimed["references"][0][1:]
         self.assertIs(value_builders.OBJECT_STORE[ref], self.entity)
-        for action, extra in (("delete", {}), ("edit", {"text": "Changed"})):
-            with self.assertRaises(ValueError):
-                self.ui(action, id=item["id"], revision=2, **extra)
+        with self.assertRaises(ValueError):
+            self.ui("edit", id=item["id"], revision=2, text="Changed")
         listed = self.tool(action="list")["annotations"][0]
         self.assertNotIn("claim_token", listed)
         completed = self.tool(action="complete", id=item["id"], claim_token=claimed["claim_token"], result="Done")
@@ -177,50 +175,41 @@ class BridgeTests(unittest.TestCase):
         self.ui("delete", id=item["id"], revision=3)
         self.assertFalse(annotations.state()["annotations"])
 
-    def test_abort_waits_for_owner_release_and_preserves_references(self):
-        item = self.create()
-        claimed = self.tool(action="claim", id=item["id"], revision=1)
-        state = self.ui("abort", id=item["id"], revision=claimed["revision"])
-        pending = state["annotations"][0]
-        self.assertEqual(pending["status"], "in_progress")
-        self.assertTrue(pending["abort_requested"])
-        self.assertIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
-        for action, extra in (("delete", {}), ("edit", {"text": "Changed"})):
-            with self.assertRaises(ValueError):
-                self.ui(action, id=item["id"], revision=pending["revision"], **extra)
-        checked = self.tool(action="check", id=item["id"], claim_token=claimed["claim_token"])
-        self.assertTrue(checked["abort_requested"])
-        for action, token in (("complete", claimed["claim_token"]), ("release", "wrong")):
-            response = annotations.manage_annotations(dict(action=action, id=item["id"],
-                                                          claim_token=token, result="Stopped"))
-            self.assertTrue(response["isError"])
-        released = self.tool(action="release", id=item["id"], claim_token=claimed["claim_token"],
-                             result="Stopped after first edge; changes retained")
-        self.assertEqual(released["status"], "aborted")
-        self.assertNotIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
-        updated = self.ui("edit", id=item["id"], revision=released["revision"], text="Try again")
-        self.assertFalse(updated["annotations"][0]["abort_requested"])
-        self.assertEqual(updated["annotations"][0]["status"], "open")
+    def test_remove_working_row_keeps_client_references_until_finish(self):
+        for action in ("complete", "release"):
+            with self.subTest(action=action):
+                self.selection.entities = [self.entity]
+                item = self.create()
+                claimed = self.tool(action="claim", id=item["id"], revision=1)
+                ref = claimed["references"][0][1:]
+                state = self.ui("delete", id=item["id"], revision=claimed["revision"])
+                self.assertFalse(state["annotations"])
+                self.assertFalse(self.tool(action="list")["annotations"])
+                self.assertIs(value_builders.OBJECT_STORE[ref], self.entity)
+                # Deletion is invisible to the client: no abort protocol or fields.
+                self.assertEqual(annotations.STORE.items[item["id"]]["status"], "in_progress")
+                finished = self.tool(action=action, id=item["id"],
+                                     claim_token=claimed["claim_token"], result="Finished")
+                self.assertEqual(finished["status"], "done" if action == "complete" else "failed")
+                self.assertNotIn("dismissed", finished)
+                self.assertNotIn("abort_requested", finished)
+                self.assertFalse(annotations.state()["annotations"])
+                self.assertNotIn(item["id"], annotations.STORE.items)
+                self.assertNotIn(ref, value_builders.OBJECT_STORE)
 
-    def test_abort_rejects_open_completed_and_stale_claim(self):
+    def test_removed_claim_still_requires_owner_token(self):
         item = self.create()
-        with self.assertRaises(ValueError):
-            self.ui("abort", id=item["id"], revision=1)
         claimed = self.tool(action="claim", id=item["id"], revision=1)
-        with self.assertRaises(ValueError):
-            self.ui("abort", id=item["id"], revision=1)
-        done = self.tool(action="complete", id=item["id"], claim_token=claimed["claim_token"], result="Done")
-        with self.assertRaises(ValueError):
-            self.ui("abort", id=item["id"], revision=done["revision"])
-        self.ui("edit", id=item["id"], revision=done["revision"], text="Again")
-        second = self.tool(action="claim", id=item["id"], revision=4)
-        with self.assertRaises(ValueError):
-            self.ui("abort", id=item["id"], revision=claimed["revision"])
-        checked = self.tool(action="check", id=item["id"], claim_token=second["claim_token"])
-        self.assertFalse(checked["abort_requested"])
-        response = annotations.manage_annotations(dict(action="check", id=item["id"],
-                                                      claim_token=claimed["claim_token"]))
+        self.ui("delete", id=item["id"], revision=claimed["revision"])
+        response = annotations.manage_annotations(dict(action="complete", id=item["id"],
+                                                      claim_token="wrong", result="Done"))
         self.assertTrue(response["isError"])
+        self.assertIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
+        self.doc.isValid = False
+        self.app.activeDocument = None
+        self.assertFalse(annotations.state()["annotations"])
+        self.assertNotIn(item["id"], annotations.STORE.items)
+        self.assertNotIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
 
     def test_clear_discards_annotations_and_drafts(self):
         capture = self.ui("capture")

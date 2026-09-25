@@ -69,7 +69,7 @@ def _entity_info(entity):
 
 
 def _public(item):
-    return {**{key: item[key] for key in ("id", "text", "status", "revision", "result", "abort_requested")},
+    return {**{key: item[key] for key in ("id", "text", "status", "revision", "result")},
             "selections": [_entity_info(entity) for entity in item["entities"]]}
 
 
@@ -78,7 +78,7 @@ def state():
     return {"document_id": document,
             "document_name": _safe_attr(_documents.get(document), "name"),
             "annotations": [_public(item) for item in STORE.items.values()
-                            if item["document"] == document]}
+                            if item["document"] == document and not item["dismissed"]]}
 
 
 def _require_document(expected=None):
@@ -120,11 +120,10 @@ def ui_action(action, args):
         STORE.edit(args.get("id"), document, args.get("revision"), args.get("text"), entities)
         _drop_references(args["id"])
         _capture = None
-    elif action == "abort":
-        STORE.request_abort(args.get("id"), document, args.get("revision"))
     elif action == "delete":
         STORE.delete(args.get("id"), document, args.get("revision"))
-        _drop_references(args["id"])
+        if args["id"] not in STORE.items:
+            _drop_references(args["id"])
     elif action == "select":
         item = STORE.get(args.get("id"), document)
         if not _valid(item["entities"]):
@@ -158,8 +157,6 @@ def manage_annotations(args):
                     value_builders.OBJECT_STORE[key] = entity
                     refs.append(f"${key}")
                 payload = {**_public(item), "claim_token": item["claim_token"], "references": refs}
-            elif action == "check":
-                payload = _public(STORE.check_claim(item["id"], document, args.get("claim_token")))
             elif action in ("complete", "release"):
                 item = STORE.finish(item["id"], document, args.get("claim_token"),
                                     args.get("result"), failed=action == "release")

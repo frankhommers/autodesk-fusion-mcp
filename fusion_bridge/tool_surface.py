@@ -345,12 +345,9 @@ TOOL_DEFINITIONS = [
         "name": MANAGE_ANNOTATIONS,
         "description": (
             "Read and process the user's session-only selection annotations in the active document. "
-            "list is read-only; claim requires id and current revision, locks editing/deletion, and returns "
+            "list is read-only; claim requires id and current revision, locks editing, and returns "
             "a private claim_token and $references to the captured objects. Claim before working. "
-            "Before each modeling step, check with id and claim_token to read abort_requested. "
-            "If true, stop work and release with a summary of partial changes; this marks aborted. "
-            "Abort is cooperative: it does not interrupt running SDK calls or undo changes. "
-            "complete requires id, claim_token and result; marks done and unlocks unless abort was requested. "
+            "complete requires id, claim_token and result; marks done and unlocks. "
             "On failure, cancellation or abandonment, release with id, claim_token and result explaining "
             "what happened; this unlocks and marks failed for user review. Never leave a claim unfinished. "
             "Do not act on annotations claimed by another agent. No automatic agent execution or timeout. "
@@ -359,10 +356,10 @@ TOOL_DEFINITIONS = [
         "inputSchema": {
             "type": "object", "additionalProperties": False,
             "properties": {
-                "action": {"type": "string", "enum": ["list", "claim", "check", "complete", "release"]},
+                "action": {"type": "string", "enum": ["list", "claim", "complete", "release"]},
                 "id": {"type": "string", "description": "Annotation ID from list."},
                 "revision": {"type": "integer", "minimum": 1, "description": "Required for claim; use revision from list."},
-                "claim_token": {"type": "string", "description": "Token returned by your claim; required to check/complete/release."},
+                "claim_token": {"type": "string", "description": "Token returned by your claim; required to complete/release."},
                 "result": {"type": "string",
                            "description": "Required to complete/release. User-visible summary or failure reason."},
             },
