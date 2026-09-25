@@ -69,7 +69,7 @@ def _entity_info(entity):
 
 
 def _public(item):
-    return {**{key: item[key] for key in ("id", "text", "status", "revision", "result")},
+    return {**{key: item[key] for key in ("id", "text", "status", "revision", "result", "abort_requested")},
             "selections": [_entity_info(entity) for entity in item["entities"]]}
 
 
@@ -120,6 +120,8 @@ def ui_action(action, args):
         STORE.edit(args.get("id"), document, args.get("revision"), args.get("text"), entities)
         _drop_references(args["id"])
         _capture = None
+    elif action == "abort":
+        STORE.request_abort(args.get("id"), document, args.get("revision"))
     elif action == "delete":
         STORE.delete(args.get("id"), document, args.get("revision"))
         _drop_references(args["id"])
@@ -156,6 +158,8 @@ def manage_annotations(args):
                     value_builders.OBJECT_STORE[key] = entity
                     refs.append(f"${key}")
                 payload = {**_public(item), "claim_token": item["claim_token"], "references": refs}
+            elif action == "check":
+                payload = _public(STORE.check_claim(item["id"], document, args.get("claim_token")))
             elif action in ("complete", "release"):
                 item = STORE.finish(item["id"], document, args.get("claim_token"),
                                     args.get("result"), failed=action == "release")

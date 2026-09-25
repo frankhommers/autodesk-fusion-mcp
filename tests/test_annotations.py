@@ -177,6 +177,51 @@ class BridgeTests(unittest.TestCase):
         self.ui("delete", id=item["id"], revision=3)
         self.assertFalse(annotations.state()["annotations"])
 
+    def test_abort_waits_for_owner_release_and_preserves_references(self):
+        item = self.create()
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        state = self.ui("abort", id=item["id"], revision=claimed["revision"])
+        pending = state["annotations"][0]
+        self.assertEqual(pending["status"], "in_progress")
+        self.assertTrue(pending["abort_requested"])
+        self.assertIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
+        for action, extra in (("delete", {}), ("edit", {"text": "Changed"})):
+            with self.assertRaises(ValueError):
+                self.ui(action, id=item["id"], revision=pending["revision"], **extra)
+        checked = self.tool(action="check", id=item["id"], claim_token=claimed["claim_token"])
+        self.assertTrue(checked["abort_requested"])
+        for action, token in (("complete", claimed["claim_token"]), ("release", "wrong")):
+            response = annotations.manage_annotations(dict(action=action, id=item["id"],
+                                                          claim_token=token, result="Stopped"))
+            self.assertTrue(response["isError"])
+        released = self.tool(action="release", id=item["id"], claim_token=claimed["claim_token"],
+                             result="Stopped after first edge; changes retained")
+        self.assertEqual(released["status"], "aborted")
+        self.assertNotIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
+        updated = self.ui("edit", id=item["id"], revision=released["revision"], text="Try again")
+        self.assertFalse(updated["annotations"][0]["abort_requested"])
+        self.assertEqual(updated["annotations"][0]["status"], "open")
+
+    def test_abort_rejects_open_completed_and_stale_claim(self):
+        item = self.create()
+        with self.assertRaises(ValueError):
+            self.ui("abort", id=item["id"], revision=1)
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        with self.assertRaises(ValueError):
+            self.ui("abort", id=item["id"], revision=1)
+        done = self.tool(action="complete", id=item["id"], claim_token=claimed["claim_token"], result="Done")
+        with self.assertRaises(ValueError):
+            self.ui("abort", id=item["id"], revision=done["revision"])
+        self.ui("edit", id=item["id"], revision=done["revision"], text="Again")
+        second = self.tool(action="claim", id=item["id"], revision=4)
+        with self.assertRaises(ValueError):
+            self.ui("abort", id=item["id"], revision=claimed["revision"])
+        checked = self.tool(action="check", id=item["id"], claim_token=second["claim_token"])
+        self.assertFalse(checked["abort_requested"])
+        response = annotations.manage_annotations(dict(action="check", id=item["id"],
+                                                      claim_token=claimed["claim_token"]))
+        self.assertTrue(response["isError"])
+
     def test_clear_discards_annotations_and_drafts(self):
         capture = self.ui("capture")
         self.create()

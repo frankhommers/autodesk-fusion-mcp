@@ -119,7 +119,10 @@ not discard them; reopen it from the toolbar. Nothing is written to the design.
 
 - **Open:** editable and removable.
 - **In progress:** claimed by an agent; editing, reactivation and deletion
-  are blocked in both the UI and backend.
+  are blocked in both the UI and backend. **Abort** requests a cooperative stop;
+  the status becomes **Abort requested · Locked** until the agent releases its claim.
+- **Aborted:** the agent acknowledged the stop; review its summary of partial
+  changes, then delete or edit/reactivate the annotation.
 - **Completed:** retained with the agent's result. Delete it with the trash
   button, or choose **Edit / Reactivate** and save to reopen it.
 - **Interrupted / failed:** released by the agent after failure/cancellation;
@@ -131,7 +134,12 @@ The agent workflow uses `manage_annotations`:
    claiming or consuming them.
 2. `{"action":"claim","id":"…","revision":1}` atomically claims an open
    annotation and returns its `claim_token` and captured-object `$references`.
-3. Work with those references in the same active document. Do not use
+3. Before each modeling step, call
+   `{"action":"check","id":"…","claim_token":"…"}`. If `abort_requested` is true,
+   stop and `release` with a summary of any partial changes. Abort does not
+   interrupt an SDK call already running, undo changes, or force-stop the external
+   agent. The agent must check and acknowledge the request.
+   Work with those references in the same active document. Do not use
    `clear_context` while references are needed. Other agents must not work on
    claimed annotations.
 4. `{"action":"complete","id":"…","claim_token":"…","result":"…"}` marks it
