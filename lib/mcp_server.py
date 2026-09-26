@@ -55,7 +55,7 @@ LEGACY_PROTOCOL_VERSION = LEGACY_PROTOCOL_VERSIONS[0]
 DEFAULT_PROTOCOL_VERSION = "2025-03-26"
 
 # Server info
-SERVER_INFO = {"name": "autodesk-fusion-mcp", "version": "1.4.1"}
+SERVER_INFO = {"name": "autodesk-fusion-mcp", "version": "1.5.0"}
 
 # Server capabilities
 SERVER_CAPABILITIES = {"tools": {}, "resources": {}}

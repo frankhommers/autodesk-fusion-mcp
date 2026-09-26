@@ -223,6 +223,16 @@ This project is licensed under the terms of the MIT license. See [LICENSE](LICEN
 
 ## Changelog
 
+- v 1.5.0
+  - Add session-only selection annotations: a Fusion palette to attach notes
+    to captured selections, and the `manage_annotations` tool so agents can
+    list, claim, complete or release them with revision and claim-token checks
+  - Right-click a selection and choose **Annotate selection** to open the
+    palette with that selection already captured
+  - Removing a row never aborts client work; references stay valid until the
+    agent completes or releases its claim
+  - Palette and About dialog prefer Fusion's Artifakt Element font
+
 - v 1.4.1
   - Wait for Fusion's main thread before binding the MCP server; bound
     dispatcher waits and distinguish queued cancellation from running work
