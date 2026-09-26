@@ -41,8 +41,19 @@ function controls() {
         ? "The agent is working on this annotation. Editing is locked."
         : stale ? "This annotation changed. Cancel or reopen Edit to load its current version." : "";
 }
+// A capture from the right-click menu starts a new annotation.
+function takeCapture(next) {
+    const pending = next.pending_capture;
+    if (!pending) return;
+    if (editing && !window.confirm("Discard the current edit?")) return;
+    if (editing) resetEditor();
+    captureId = pending.capture_id;
+    $("selection").textContent = selectionLabel(pending.selections);
+    $("text").focus();
+}
 function applyState(next) {
     if (current.document_id !== next.document_id) resetEditor();
+    takeCapture(next);
     const changed = JSON.stringify(current) !== JSON.stringify(next);
     current = next;
     document.documentElement.dataset.theme = next.theme || "light";
@@ -126,7 +137,12 @@ async function poll() {
     try {
         const next = await request("list");
         if (!busy && generation === requestedGeneration) applyState(next);
+        else takeCapture(next);
     } catch (error) { $("error").textContent = error.message; }
     finally { polling = false; }
 }
+window.fusionJavaScriptHandler = {handle(action) {
+    if (action === "refresh") poll();
+    return "OK";
+}};
 controls(); poll(); setInterval(poll, 1500);

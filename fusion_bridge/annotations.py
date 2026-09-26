@@ -98,20 +98,40 @@ def _captured(capture_id, document):
     return _capture["entities"]
 
 
+def _capture_selection(document, pending=False):
+    global _capture
+    selections = get_app().userInterface.activeSelections
+    entities = [selections.item(i).entity for i in range(selections.count)]
+    if not entities or not _valid(entities):
+        raise ValueError("Select one or more valid objects in Fusion first.")
+    _capture = dict(id=uuid4().hex, document=document, entities=entities, pending=pending)
+    return {"capture_id": _capture["id"], "selections": [_entity_info(e) for e in entities]}
+
+
+def capture_for_palette():
+    """Context-menu entry: capture now; the palette picks it up on its next read."""
+    _capture_selection(_require_document(), pending=True)
+
+
+def _ui_state():
+    # Only the palette consumes a pending capture; MCP listing never does.
+    payload = state()
+    if _capture and _capture["pending"] and _capture["document"] == payload["document_id"]:
+        _capture["pending"] = False
+        payload["pending_capture"] = {"capture_id": _capture["id"],
+                                      "selections": [_entity_info(e) for e in _capture["entities"]]}
+    return payload
+
+
 def ui_action(action, args):
     global _capture
     if action == "list":
-        return state()
+        return _ui_state()
     if not args.get("document_id"):
         raise ValueError("Refresh the panel before continuing.")
     document = _require_document(args["document_id"])
     if action == "capture":
-        selections = get_app().userInterface.activeSelections
-        entities = [selections.item(i).entity for i in range(selections.count)]
-        if not entities or not _valid(entities):
-            raise ValueError("Select one or more valid objects in Fusion first.")
-        _capture = dict(id=uuid4().hex, document=document, entities=entities)
-        return {"capture_id": _capture["id"], "selections": [_entity_info(e) for e in entities]}
+        return _capture_selection(document)
     if action == "create":
         STORE.create(document, args.get("text"), _captured(args.get("capture_id"), document))
         _capture = None
@@ -135,7 +155,7 @@ def ui_action(action, args):
                 raise ValueError("Fusion cannot select this object in the current workspace.")
     else:
         raise ValueError("Unknown annotation action.")
-    return state()
+    return _ui_state()
 
 
 def manage_annotations(args):

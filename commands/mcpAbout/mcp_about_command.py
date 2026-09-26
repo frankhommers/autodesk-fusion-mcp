@@ -54,7 +54,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
     port = settings.MCP_SERVER_PORT
     version_info = python_exec.get_version_info(python_exec.get_addin_dir())
-    about_html = f"""<div style="font-family: Arial, sans-serif; padding: 10px;">
+    about_html = f"""<div style="font-family: 'Artifakt Element', Arial, sans-serif; padding: 10px;">
 <h2 style="color: #0696D7;">Autodesk Fusion MCP</h2>
 <p style="color: #666;">{version_info}</p>
 

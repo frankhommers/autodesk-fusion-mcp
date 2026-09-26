@@ -211,6 +211,29 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn(item["id"], annotations.STORE.items)
         self.assertNotIn(claimed["references"][0][1:], value_builders.OBJECT_STORE)
 
+    def test_context_menu_capture_is_handed_to_palette_once(self):
+        annotations.capture_for_palette()
+        self.selection.entities = []
+        self.assertNotIn("pending_capture", self.tool(action="list"))
+        pending = annotations.ui_action("list", {})["pending_capture"]
+        self.assertEqual(pending["selections"][0]["name"], "Edge A")
+        self.assertNotIn("pending_capture", annotations.ui_action("list", {}))
+        state = self.ui("create", text="Round this", capture_id=pending["capture_id"])
+        self.assertEqual(state["annotations"][0]["selections"][0]["name"], "Edge A")
+
+    def test_context_menu_capture_stays_with_its_document(self):
+        annotations.capture_for_palette()
+        self.app.activeDocument = SimpleNamespace(isValid=True, name="Other")
+        self.assertNotIn("pending_capture", annotations.ui_action("list", {}))
+        self.app.activeDocument = self.doc
+        self.assertIn("pending_capture", annotations.ui_action("list", {}))
+
+    def test_context_menu_capture_requires_selection(self):
+        self.selection.entities = []
+        with self.assertRaises(ValueError):
+            annotations.capture_for_palette()
+        self.assertNotIn("pending_capture", annotations.ui_action("list", {}))
+
     def test_clear_discards_annotations_and_drafts(self):
         capture = self.ui("capture")
         self.create()

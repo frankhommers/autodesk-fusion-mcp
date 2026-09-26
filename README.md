@@ -110,7 +110,9 @@ follow-up API calls.
 Open **Selection annotations** from the Design workspace's **Utilities → Add-Ins**
 panel. Select objects in Fusion, click **Capture selection**, type a
 note, and click **Add**. The captured selection stays attached even when
-you select something else. Ask your agent to process the open annotations.
+you select something else. Shortcut: right-click a selection and choose
+**Annotate selection** to open the panel with that selection already captured.
+Ask your agent to process the open annotations.
 Adding a note does not automatically start an agent.
 
 Annotations are grouped by document and live only in memory. Closing a document,
