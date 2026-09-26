@@ -93,11 +93,39 @@ class Selections:
         return True
 
 
+class FakeDesign:
+    """Fusion attributes follow geometry through recomputes; memory references may not."""
+
+    def __init__(self):
+        self.attributes = []
+        self.timeline = SimpleNamespace(markerPosition=5, count=5)
+
+    def findAttributes(self, group, name):
+        return [a for a in self.attributes if a.groupName == group and (not name or a.name == name)]
+
+    def entity(self, name, length=10.0):
+        entity = SimpleNamespace(isValid=True, name=name, objectType="adsk::fusion::BRepEdge", length=length)
+        design = self
+
+        class Attributes:
+            def add(self, group, attribute_name, value):
+                attribute = SimpleNamespace(groupName=group, name=attribute_name, value=value,
+                                            parent=entity, otherParents=[])
+                attribute.deleteMe = lambda: design.attributes.remove(attribute)
+                design.attributes.append(attribute)
+                return attribute
+
+        entity.attributes = Attributes()
+        return entity
+
+
 class BridgeTests(unittest.TestCase):
     def setUp(self):
         annotations.clear()
-        self.doc = SimpleNamespace(isValid=True, name="Design")
-        self.entity = SimpleNamespace(isValid=True, name="Edge A", objectType="adsk::fusion::BRepEdge")
+        self.design = FakeDesign()
+        self.doc = SimpleNamespace(isValid=True, name="Design", products=SimpleNamespace(
+            itemByProductType=lambda product: self.design))
+        self.entity = self.design.entity("Edge A")
         self.selection = Selections([self.entity])
         self.app = SimpleNamespace(activeDocument=self.doc,
                                    userInterface=SimpleNamespace(activeSelections=self.selection))
@@ -233,6 +261,109 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             annotations.capture_for_palette()
         self.assertNotIn("pending_capture", annotations.ui_action("list", {}))
+
+    def marker(self):
+        [marker] = self.design.findAttributes(annotations.MARKER_GROUP, "")
+        return marker
+
+    def test_marker_follows_recomputed_geometry(self):
+        item = self.create()
+        self.assertEqual(self.marker().value, item["id"])
+        # A parameter change invalidates the memory reference; the marker moves along.
+        recomputed = self.design.entity("Edge A")
+        self.entity.isValid = False
+        self.marker().parent = recomputed
+        self.assertEqual(annotations.state()["annotations"][0]["selections"][0]["status"], "ok")
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        self.assertEqual(claimed["warnings"], [])
+        self.assertIs(value_builders.OBJECT_STORE[claimed["references"][0][1:]], recomputed)
+
+    def test_changed_geometry_is_claimable_with_warning(self):
+        item = self.create()
+        self.entity.length = 12.0
+        self.assertEqual(annotations.state()["annotations"][0]["selections"][0]["status"], "changed")
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        self.assertIn("changed since it was captured", claimed["warnings"][0])
+
+    def test_split_geometry_references_every_piece(self):
+        item = self.create()
+        other = self.design.entity("Edge A", length=4.0)
+        self.entity.length = 4.0
+        self.marker().otherParents = [other]
+        selection = annotations.state()["annotations"][0]["selections"][0]
+        self.assertEqual((selection["status"], selection["parts"]), ("split", 2))
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        self.assertEqual(len(claimed["references"]), 2)
+        self.assertEqual(claimed["selections"][0]["references"], claimed["references"])
+        self.assertIs(value_builders.OBJECT_STORE[claimed["references"][1][1:]], other)
+        self.assertIn("was split", claimed["warnings"][0])
+        self.ui("select", id=item["id"])
+        self.assertEqual(self.selection.entities, [self.entity, other])
+
+    def test_consumed_geometry_is_missing_and_cannot_be_claimed(self):
+        item = self.create()
+        self.marker().parent = None  # E.g. the edge disappeared into a fillet.
+        self.assertEqual(annotations.state()["annotations"][0]["selections"][0]["status"], "missing")
+        response = annotations.manage_annotations(dict(action="claim", id=item["id"], revision=1))
+        self.assertTrue(response["isError"])
+
+    def test_undone_marker_falls_back_to_memory_reference(self):
+        self.create()
+        self.design.attributes.clear()  # Ctrl+Z removed the marker.
+        self.assertEqual(annotations.state()["annotations"][0]["selections"][0]["status"], "ok")
+
+    def test_rolled_back_timeline_is_unverified(self):
+        item = self.create()
+        self.design.timeline.markerPosition = 2
+        self.marker().parent = None
+        self.assertEqual(annotations.state()["annotations"][0]["selections"][0]["status"], "unverified")
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        self.assertIn("timeline is rolled back", claimed["warnings"][0])
+
+    def test_markers_removed_on_delete_complete_and_stop_but_kept_on_release(self):
+        item = self.create()
+        self.ui("delete", id=item["id"], revision=1)
+        self.assertFalse(self.design.attributes)
+        self.selection.entities = [self.entity]
+        item = self.create()
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        self.tool(action="release", id=item["id"], claim_token=claimed["claim_token"], result="Failed")
+        self.assertEqual(annotations.state()["marker_count"], 1)
+        self.ui("edit", id=item["id"], revision=3, text="Retry")
+        claimed = self.tool(action="claim", id=item["id"], revision=4)
+        self.tool(action="complete", id=item["id"], claim_token=claimed["claim_token"], result="Done")
+        self.assertFalse(self.design.attributes)
+        self.assertIsNone(annotations.state()["annotations"][0]["selections"][0]["status"])
+        self.selection.entities = [self.entity]
+        self.create()
+        annotations.clear()
+        self.assertFalse(self.design.attributes)
+
+    def test_reactivating_completed_work_marks_current_geometry(self):
+        item = self.create()
+        claimed = self.tool(action="claim", id=item["id"], revision=1)
+        self.entity.length = 12.0  # The agent's change is the new baseline.
+        self.tool(action="complete", id=item["id"], claim_token=claimed["claim_token"], result="Done")
+        self.ui("edit", id=item["id"], revision=3, text="Longer still")
+        self.assertEqual(self.marker().name, f"{item['id']}_0")
+        self.assertEqual(annotations.state()["annotations"][0]["selections"][0]["status"], "ok")
+
+    def test_recapture_moves_marker_to_new_selection(self):
+        item = self.create()
+        edge_b = self.design.entity("Edge B")
+        self.selection.entities = [edge_b]
+        capture = self.ui("capture")
+        self.ui("edit", id=item["id"], revision=1, text="Other edge", capture_id=capture["capture_id"])
+        self.assertIs(self.marker().parent, edge_b)
+
+    def test_remove_markers_purges_leftovers_and_keeps_annotations(self):
+        self.create()
+        leftover = self.design.entity("Saved earlier")
+        leftover.attributes.add(annotations.MARKER_GROUP, "old_0", "old")
+        self.assertEqual(annotations.state()["marker_count"], 2)
+        state = self.ui("remove_markers")
+        self.assertEqual(state["marker_count"], 0)
+        self.assertEqual(state["annotations"][0]["selections"][0]["status"], "ok")
 
     def test_clear_discards_annotations_and_drafts(self):
         capture = self.ui("capture")

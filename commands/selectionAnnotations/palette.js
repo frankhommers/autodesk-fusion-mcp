@@ -3,6 +3,12 @@ const $ = id => document.getElementById(id);
 let current = {document_id:null, annotations:[]};
 let captureId = null, editing = null, busy = false, polling = false, generation = 0;
 const labels = {open:"Open", in_progress:"In progress · Locked", done:"Completed", failed:"Interrupted / failed"};
+const selectionNotes = {
+    changed:"changed since it was captured",
+    split:"was split into several pieces",
+    missing:"is no longer in the design. Edit this annotation to capture it again",
+    unverified:"cannot be checked while the timeline is rolled back",
+};
 
 async function request(action, data = {}) {
     const raw = await window.adsk.fusionSendData(action, JSON.stringify(data));
@@ -35,6 +41,7 @@ function controls() {
     const stale = editing && (!item || item.revision !== editing.revision);
     const disabled = busy || !current.document_id || !!locked();
     for (const id of ["text", "capture", "save"]) $(id).disabled = disabled;
+    $("markers").disabled = busy || !current.document_id;
     $("save").disabled ||= !!stale || !$("text").value.trim() || (!editing && !captureId);
     $("cancel").disabled = busy;
     $("notice").textContent = locked()
@@ -58,6 +65,8 @@ function applyState(next) {
     current = next;
     document.documentElement.dataset.theme = next.theme || "light";
     $("document").textContent = next.document_name || "No document open";
+    $("markers").hidden = !next.marker_count;
+    $("markers").textContent = `Remove markers from design (${next.marker_count})`;
     if (changed) render();
     controls();
 }
@@ -86,7 +95,9 @@ function render() {
         card.append(node("span", labels[item.status], `badge ${item.status}`));
         card.append(node("p", item.text, "note"));
         card.append(node("p", selectionLabel(item.selections), "muted"));
-        if (item.selections.some(s => !s.valid)) card.append(node("p", "Selection is no longer valid. Edit this annotation to capture it again.", "muted"));
+        for (const s of item.selections) {
+            if (selectionNotes[s.status]) card.append(node("p", `${selectionLabel([s])} ${selectionNotes[s.status]}.`, `warning ${s.status}`));
+        }
         if (item.result) card.append(node("p", item.result, "result"));
         const actions = node("div", undefined, "row");
         function button(label, handler, disabled = false) {
@@ -130,6 +141,10 @@ $("save").onclick = () => act(async () => {
 $("cancel").onclick = () => { resetEditor(); controls(); };
 $("text").oninput = controls;
 $("refresh").onclick = () => act(async () => applyState(await request("list")));
+$("markers").onclick = () => {
+    if (!window.confirm("Remove all Autodesk Fusion MCP markers from this design? Annotations stay, but can no longer follow geometry changes.")) return;
+    act(async () => applyState(await request("remove_markers", {document_id:current.document_id})));
+};
 async function poll() {
     if (busy || polling || !window.adsk) return;
     polling = true;

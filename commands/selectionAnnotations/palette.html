@@ -35,6 +35,8 @@ button:focus-visible, textarea:focus-visible {outline:1px solid var(--accent); o
 .badge.failed {color:var(--error)}
 .note, .result {white-space:pre-wrap; overflow-wrap:anywhere}
 .result {color:var(--muted); font-size:11px}
+.warning {font-size:11px; color:var(--accent)}
+.warning.missing {color:var(--error)}
 .icon {width:27px; padding:3px; margin-left:auto; display:inline-flex; align-items:center; justify-content:center}
 #error {color:var(--error); white-space:pre-wrap; overflow-wrap:anywhere; margin-top:6px}
 #notice {color:var(--accent); margin-top:6px}
@@ -58,7 +60,8 @@ button:focus-visible, textarea:focus-visible {outline:1px solid var(--accent); o
 </section>
 <div class="row between"><h2 style="margin:0">Annotations</h2><button id="refresh" type="button">Refresh</button></div>
 <div id="items"></div>
-<p class="muted">Session only. Ask your agent to process open annotations.</p>
+<p class="muted">Session only. Ask your agent to process open annotations. Captured objects carry a marker in the design so annotations can follow geometry changes.</p>
+<button id="markers" type="button" hidden>Remove markers from design</button>
 <script src="palette.js"></script>
 </body>
 </html>

@@ -351,7 +351,11 @@ TOOL_DEFINITIONS = [
             "On failure, cancellation or abandonment, release with id, claim_token and result explaining "
             "what happened; this unlocks and marks failed for user review. Never leave a claim unfinished. "
             "Do not act on annotations claimed by another agent. No automatic agent execution or timeout. "
-            "Keep the same active document while working. References expire on completion/release."
+            "Keep the same active document while working. References expire on completion/release. "
+            "Each selection has a status: ok, changed (geometry differs from capture), split (references "
+            "cover every piece), unverified (timeline rolled back) or missing (claim refused; ask the user "
+            "to recapture). claim returns warnings for changed/split/unverified selections: check them "
+            "before modifying anything."
         ),
         "inputSchema": {
             "type": "object", "additionalProperties": False,

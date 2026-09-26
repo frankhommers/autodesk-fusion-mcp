@@ -117,7 +117,26 @@ Adding a note does not automatically start an agent.
 
 Annotations are grouped by document and live only in memory. Closing a document,
 stopping the add-in, or exiting Fusion discards them. Closing the palette does
-not discard them; reopen it from the toolbar. Nothing is written to the design.
+not discard them; reopen it from the toolbar.
+
+To follow geometry through edits, each captured object gets a small Fusion
+attribute (a *marker*, group `autodesk-fusion-mcp`) holding only the annotation
+ID. Fusion carries markers along when geometry is recomputed or split. Markers
+are removed when the annotation is deleted or completed and when the add-in
+stops. Adding or removing a marker is an undo step in Fusion, and markers present
+when you save are stored with that version. **Remove markers from design** in
+the palette removes every marker from the active design, including leftovers
+from a crash or an earlier session. Objects in referenced (external) components
+cannot carry markers; they are tracked in memory only.
+
+Each captured selection shows its status after later edits:
+
+- **ok:** unchanged.
+- **changed:** still present, but its size or position differs from capture.
+- **split:** divided into several pieces; the agent receives all of them.
+- **missing:** consumed or deleted (for example an edge that became a fillet).
+  Claiming is refused; edit the annotation and capture it again.
+- **unverified:** the timeline is rolled back, so nothing can be checked.
 
 - **Open:** editable and removable.
 - **In progress:** claimed by an agent; editing and reactivation are blocked
@@ -134,7 +153,8 @@ The agent workflow uses `manage_annotations`:
 1. `{"action":"list"}` returns annotations for the active document without
    claiming or consuming them.
 2. `{"action":"claim","id":"…","revision":1}` atomically claims an open
-   annotation and returns its `claim_token` and captured-object `$references`.
+   annotation and returns its `claim_token`, the current `$references` of the
+   captured objects, and `warnings` for changed, split or unverified selections.
 3. Work with those references in the same active document. Do not use
    `clear_context` while references are needed. Other agents must not work on
    claimed annotations.
@@ -151,9 +171,9 @@ the document closes, or the add-in stops.
 A released annotation is not automatically retried. The user reactivates it.
 
 Edits use revision checks, so an old UI cannot overwrite a newer annotation.
-If geometry has been deleted or invalidated, claiming it is rejected; edit the
-annotation and capture its selection again. Annotations do not freeze geometry
-or prevent ordinary modeling changes by the user or other agents.
+If captured geometry is missing, claiming it is rejected; edit the annotation
+and capture its selection again. Annotations do not freeze geometry or prevent
+ordinary modeling changes by the user or other agents.
 
 ## Architecture
 
