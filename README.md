@@ -243,6 +243,15 @@ This project is licensed under the terms of the MIT license. See [LICENSE](LICEN
 
 ## Changelog
 
+- v 1.6.0
+  - Track annotated geometry with Fusion attribute markers (group
+    `autodesk-fusion-mcp`) so annotations follow recomputes and splits
+  - Report each selection as ok, changed, split, missing or unverified in the
+    palette and in `manage_annotations`; claims return every piece of a split
+    selection plus warnings, and refuse missing geometry
+  - Remove markers on delete, completion and add-in stop; **Remove markers from
+    design** purges all markers, including leftovers
+
 - v 1.5.0
   - Add session-only selection annotations: a Fusion palette to attach notes
     to captured selections, and the `manage_annotations` tool so agents can
